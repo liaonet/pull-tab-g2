@@ -1,0 +1,10 @@
+# Local-only wrangler config for the e2e rig: runs the relay worker that `pulltab init` writes under test/rig/relayhome
+# with `wrangler dev`, backed by a local D1 database. The database id is a placeholder; nothing is deployed from this file.
+name = "pulltab-relay-test"
+main = "relayhome/site/worker.mjs"
+compatibility_date = "2026-08-01"
+compatibility_flags = ["nodejs_compat"]
+[[d1_databases]]
+binding = "DB"
+database_name = "pulltab-relay-test"
+database_id = "00000000-0000-0000-0000-000000000001"

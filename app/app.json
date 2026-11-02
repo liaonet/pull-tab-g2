@@ -1,0 +1,27 @@
+{
+  "package_id": "com.billliao.pulltab",
+  "edition": "202601",
+  "name": "Pull Tab",
+  "version": "0.1.16",
+  "min_sdk_version": "0.0.16",
+  "entrypoint": "index.html",
+  "permissions": [
+    {
+      "name": "network",
+      "desc": "Sends your spoken request, end-to-end encrypted, to your own private Tab relay (an address ending in .sites.tab.bot). Your Tab answers by message. Help links open the setup guide (pulltab.sites.tab.bot), Discord help (discord.gg) and the Tab join page (tab.bot).",
+      "whitelist": [
+        "https://*.sites.tab.bot",
+        "https://pulltab.sites.tab.bot",
+        "https://discord.gg",
+        "https://tab.bot"
+      ]
+    },
+    {
+      "name": "g2-microphone",
+      "desc": "Records your voice from your triple-tap on the temple or ring until your next triple-tap sends it, so your Tab can hear your request."
+    }
+  ],
+  "supported_languages": [
+    "en"
+  ]
+}

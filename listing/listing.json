@@ -1,0 +1,38 @@
+{
+ "name": "Pull Tab",
+ "tagline": "Simplest, secure way to talk to your Tab assistant",
+ "description": "Pull Tab is the simplest, secure way to talk to your Tab assistant from Even Realities G2.\n\nTriple-tap the temple or the R1 ring, ask your question, and triple-tap to send. The lens says \"Sent, reply coming by WhatsApp\" (or \"by text\") and goes dark. Your own Tab answers you by message, in the chat you already use with it, so each answer arrives once, like any other message. Changed your mind? Triple-tap again while \"Sent\" is showing, and it's cancelled. Double-tap to exit.\n\nSetup takes one message. Open Pull Tab on your phone, copy the setup message, and send it to your Tab in the chat you already use. Your Tab sets up a private relay just for you and tells you when you're connected. There are no accounts to create in Pull Tab and no keys to type.\n\nPrivate by design:\n- Each recording is encrypted on your phone (AES-256-GCM), and only your own Tab can open it.\n- Your recording goes straight from your phone to your own private relay, set up by your own Tab. There is no Pull Tab server in between, and the relay can't listen to your recording.\n- Recordings are deleted from your relay as soon as your Tab answers or you cancel, and anything left over expires after 30 minutes (the hosting's encrypted history of it expires within 30 days).\n- The mic is on only between your triple-tap and the triple-tap that sends, and never longer than 55 seconds. Nothing is sent without your triple-tap.\n\nYou need a Tab assistant (tab.bot).\n\nPull Tab is an independent app. It isn't made or endorsed by Even Realities or by Tab.\nSupport: the Pull Tab Discord (link below).",
+ "description_even_hub_portal": "Pull Tab connects your Even G2 glasses to your Tab (tab.bot), your personal AI assistant. Triple-tap to talk & again to send. Your Tab replies by Text or WhatsApp, so turn on notifications for your glasses. Setup takes about a minute: open Pull Tab on your phone and send the setup message to your Tab. Free. Support: https://discord.gg/j4kBHPkvC8",
+ "category": [
+  "AI",
+  "Productivity"
+ ],
+ "tags": [
+  "Tab",
+  "AI assistant",
+  "voice",
+  "hands-free",
+  "private"
+ ],
+ "privacy_link": "https://pulltab.sites.tab.bot/privacy",
+ "developer_name": "Bill Liao",
+ "screenshots": [
+  "screenshots/1-setup-on-lens.png",
+  "screenshots/2-listening.png",
+  "screenshots/3-thinking.png",
+  "screenshots/4-answer.png",
+  "screenshots/5-long-answer-pages.png"
+ ],
+ "icon": "icon.png (24x24, #F4F4F4 on transparent)",
+ "release_notes_v0_1_0": "Talk to your own Tab assistant from your G2: hold the temple or ring, speak, and the answer appears on the lens and clears itself after you read it. One-message setup, end-to-end encrypted.",
+ "release_notes_v0_1_1": "Shows the version on the launch hint. The switchboard moved to its own address.",
+ "release_notes_v0_1_2": "Tap to send now waits a moment, so a triple tap cancels before anything is sent. The setup message carries file fingerprints your Tab checks before it builds your relay. Until your Tab is connected, holding to talk asks you to set up Pull Tab on your phone first.",
+ "release_notes_v0_1_3": "The top of the lens now shows the time, the date and your glasses' battery level (and your ring's, when the Even app reports it).",
+ "release_notes_v0_1_5": "New gestures: double-tap to start talking, tap once to send, triple-tap to cancel. Hold the temple or ring for the exit menu. Nothing is ever sent without your tap: a recording that reaches 55 seconds is thrown away, and the waiting screen goes dark after 30 seconds (the answer still appears).",
+ "release_notes_v0_1_6": "Pull Tab now talks straight to your own Tab's private relay, with no Pull Tab server in between. Your phone checks that every answer really comes from your relay.",
+ "release_notes_v0_1_7": "Double-tap to send: while recording, a single tap does nothing and a double-tap sends, so a stray tap or ring brush can't send. Triple-tap still cancels. Notifications and system menus no longer light the Pull Tab screen or interrupt a recording.",
+ "release_notes_v0_1_8": "Your Tab now answers by message (WhatsApp or text, set by your Tab at setup), not on the lens: the lens shows \"Sent\" for 8 seconds, and a triple tap then cancels. Security: making a new pairing code now has your Tab shut down the old one; the copied setup message is cleared from the clipboard after 30 seconds.",
+ "release_notes_v0_1_13": "Triple-tap to record, triple-tap to send, triple-tap again to cancel a sent request. Double-tap to exit from any screen.",
+ "release_notes_v0_1_15": "The hold gesture is gone: holding the temple or ring now does nothing. Double-tap to exit from any screen.",
+ "release_notes_v0_1_16": "Double-tap exits reliably again, even after your phone has been asleep or locked. A single tap no longer starts a recording by mistake. Triple-tap to send is more dependable, including right at the 55-second limit."
+}

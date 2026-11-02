@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pull Tab</title>
+<style>
+body{font:16px/1.45 -apple-system,system-ui,sans-serif;margin:0;padding:20px;background:#0b0b0b;color:#e8e8e8}
+h1{font-size:22px;margin:0}.tag{color:#9a9a9a;font-size:14px;margin:2px 0 16px}
+h2{font-size:15px;margin:22px 0 6px;color:#cfcfcf}
+#state{display:inline-block;padding:6px 10px;border-radius:999px;background:#2a2a2a;color:#ddd;font-size:14px}
+#state.ok{background:#12391f;color:#9be7b0}
+textarea,input{width:100%;box-sizing:border-box;background:#161616;color:#f0f0f0;border:1px solid #333;border-radius:10px;padding:10px;font:14px/1.4 ui-monospace,Menlo,monospace}
+textarea{height:190px;resize:none}
+button{display:block;width:100%;margin:10px 0 0;padding:12px;border:0;border-radius:10px;background:#f4f4f4;color:#111;font-size:16px;font-weight:600}
+a.link{display:block;width:fit-content;margin:6px 0;padding:6px 0;color:#e8e8e8;font-size:14px;text-decoration:underline}
+#links{margin:14px 0 24px}
+.join{margin:6px 0;padding:6px 0;color:#e8e8e8;font-size:14px}.join a{color:#e8e8e8;text-decoration:underline}
+ol{padding-left:20px;margin:6px 0}li{margin:6px 0}
+.small{color:#8a8a8a;font-size:13px}.note{color:#9be7b0;font-size:14px;min-height:1em;margin-top:6px}
+#lens{white-space:pre-wrap;border:1px solid #2c2c2c;border-radius:8px;padding:10px;font:13px/1.35 ui-monospace,Menlo,monospace;color:#7dff9b;background:#050805;min-height:60px}
+</style></head>
+<body>
+<h1>Pull Tab</h1>
+<div class="tag">Simplest, secure way to talk to your Tab assistant from Even G2.</div>
+<span id="state">Starting...</span>
+
+<div id="setup" style="display:none">
+  <h2>Connect your Tab (once)</h2>
+  <ol>
+    <li>Copy this message and send it to your Tab, in the chat where you already talk to it:</li>
+  </ol>
+  <textarea id="msg" readonly></textarea>
+  <button id="copy">Copy message</button>
+  <div class="note" id="copied"></div>
+  <ol start="2">
+    <li>Your Tab replies at once, sets up your own private relay, and tells you when it's ready.</li>
+    <li>Come back here: it shows <b>Connected to your Tab</b>. Then triple-tap the temple or ring to talk.</li>
+  </ol>
+  <p class="small">The pairing code is the key to your glasses' link with your Tab. Only send it to your own Tab, and don't share or forward that chat: anyone with the code can talk to your Tab as you.</p>
+  <h2>Have a code from your Tab already?</h2>
+  <input id="code" placeholder="PT1-..." autocomplete="off" autocapitalize="characters" spellcheck="false">
+  <button id="use">Use this code</button>
+  <div class="note" id="codemsg"></div>
+  <h2>Did your Tab give you a relay address?</h2>
+  <p class="small">Only if your Tab says so. It looks like name.sites.tab.bot</p>
+  <input id="relayurl" placeholder="yourname.sites.tab.bot" autocomplete="off" autocapitalize="none" spellcheck="false" inputmode="url">
+  <button id="userelay">Use this relay</button>
+  <div class="note" id="relaymsg"></div>
+</div>
+
+<div id="connected" style="display:none">
+  <h2>How to use</h2>
+  <ol id="help">
+    <li>Triple Tap to Listen, Send / Cancel</li>
+    <li>Tab will reply by Text or WhatsApp (turn on notifications for your glasses)</li>
+    <li>Double Tap to Exit</li>
+  </ol>
+</div>
+
+<h2>On the lens now</h2>
+<div id="lens"></div>
+
+<h2>Privacy</h2>
+<p class="small">Your recording is encrypted on this phone. Only your own Tab holds the key: it goes straight from this phone to your own private relay, which your Tab set up for you, and the relay can't open it. Once your Tab opens it, your words are handled like anything else you tell your Tab. It is deleted from your relay once your Tab answers or you cancel, and anything left over expires after 30 minutes. The relay's hosting keeps encrypted database history for up to 30 days, which only your pairing code can open. Pull Tab has no account, no analytics and no server of its own. Full notice: pulltab.sites.tab.bot/privacy</p>
+<p class="small">Your relay: <span id="relayname"></span> · Pull Tab <span id="ver"></span></p>
+<div id="links">
+<a class="link" id="discord" href="https://discord.gg/j4kBHPkvC8" target="_blank" rel="noopener">Get help on Discord</a>
+<p class="join" id="joinline">Not a TAB member? <a id="join" href="https://tab.bot/r/F97BF7357521A088" target="_blank" rel="noopener">Join here</a></p>
+<a class="link" id="reset" href="#" role="button">Reset pairing</a>
+</div>
+<script type="module" src="/src/main.ts"></script>
+</body></html>

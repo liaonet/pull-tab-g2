@@ -1,0 +1,33 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pull Tab privacy notice</title><meta name="description" content="What Pull Tab handles and where it goes."><meta property="og:title" content="Pull Tab privacy notice"><meta property="og:description" content="What Pull Tab handles and where it goes.">
+<style>body{font:17px/1.6 -apple-system,system-ui,sans-serif;max-width:46rem;margin:0 auto;padding:1.5rem;color:#111;background:#fff}
+h1{font-size:1.7rem;line-height:1.25}h2{font-size:1.25rem;margin-top:2rem;border-top:1px solid #eee;padding-top:1rem}h3{font-size:1.05rem}
+pre{background:#f5f5f5;padding:.8rem;border-radius:8px;overflow-x:auto;font-size:.85rem;line-height:1.45}code{font-size:.9em;background:#f3f3f3;padding:.08rem .25rem;border-radius:4px}pre code{background:none;padding:0}
+blockquote{margin:1rem 0;padding:.4rem 1rem;border-left:3px solid #ccc;color:#444}table{border-collapse:collapse;font-size:.9rem;width:100%}td,th{border:1px solid #ddd;padding:.4rem;text-align:left;vertical-align:top}
+a{color:#0b57d0}.top{font-size:.9rem;color:#666}@media(prefers-color-scheme:dark){body{background:#111;color:#eee}pre,code{background:#1d1d1d}td,th{border-color:#333}h2{border-color:#222}blockquote{color:#bbb}}</style></head><body><p class="top"><a href="/">Pull Tab</a> · <a href="/setup/">Setup guide</a> · <a href="/setup.md">setup.md</a> · <a href="/privacy/">Privacy</a></p>
+<h1>Pull Tab privacy notice</h1>
+<p>Last updated: October 26, 2026 (Pull Tab 0.1.9). Pull Tab is an Even G2 app made by Bill Liao. It connects your glasses to <strong>your own Tab assistant</strong>.</p>
+<h2>What Pull Tab collects</h2>
+<p>Pull Tab has no account, no analytics, no ads and no tracking. It handles only:</p>
+<ul>
+<li><strong>Your voice recordings.</strong> The glasses microphone (permission <code>g2-microphone</code>) records only after you triple-tap the temple or ring to start. Recording stops when you triple-tap to send, double-tap to exit, if nothing is said for 8 seconds, or at 55 seconds (that recording is thrown away, not sent).</li>
+<li><strong>A pairing secret.</strong> The app makes it on your phone on first open and keeps it in the app's local storage on your phone.</li>
+<li><strong>Battery levels</strong> of your glasses (and of your ring, if the Even app reports it), read from the Even app only to show them at the top of the lens with the time and date. They stay on your phone and are never sent anywhere.</li>
+</ul>
+<h2>Where your recording goes</h2>
+<ol>
+<li>Your phone encrypts each recording (AES-256-GCM) with a key derived from your pairing secret. Only your phone and your own Tab hold that key. You give the pairing secret to your Tab once, in your chat with it, and your Tab keeps it in its private storage. Don't share or forward that chat. Pull Tab clears the copied setup message from your phone's clipboard after 30 seconds.</li>
+<li>The encrypted recording goes, using the <code>network</code> permission, straight to <strong>your own relay</strong>: a small private service your Tab runs for you at an address ending in <code>.sites.tab.bot</code>. This is the only place the app contacts. There is no Pull Tab server in between, and the developer never receives your recordings. The app checks that every reply from your relay is signed by it (with a key that comes from your pairing secret) and refuses anything else, so no other website can pose as your relay. Like any website, your relay's hosting sees your phone's internet address when the app connects.</li>
+<li>Your relay holds the encrypted recording until your Tab picks it up (up to 8 recordings can wait, first in, first out), and sends your Tab a short notification email for each. That email contains no audio, words or keys. Your Tab then decrypts the recording, transcribes it in memory and answers you by message (on WhatsApp or by text, in your usual chat with it). Answers never go through Pull Tab or your relay.</li>
+<li>Your relay deletes the recording as soon as your Tab answers, or as soon as you cancel it (a triple tap while "Sent" is on the lens cancels only that recording). Anything left over is never served after 30 minutes and is erased the next time your relay is used. The relay's hosting keeps encrypted history of its database for up to 30 days; only your pairing code can open it.</li>
+</ol>
+<p>Once your Tab has decrypted a recording, your words are handled like anything else you tell your Tab, under your own agreement with Tab (tab.bot), including by the services and AI models your Tab runs on. Pull Tab doesn't change that agreement.</p>
+<h2>Your choices</h2>
+<ul>
+<li><strong>Disconnect:</strong> tap "Reset pairing" and send the new setup message to your Tab: your Tab shuts down the old relay, so the old code stops working. Or uninstall Pull Tab and ask your Tab to shut down and delete your relay.</li>
+<li><strong>Delete your data:</strong> recordings are deleted automatically, as described above. Uninstalling the app clears its local storage.</li>
+</ul>
+<h2>Hosting</h2>
+<p>Pull Tab has no server of its own. Each relay runs as a small Worker on Tab's site hosting (<code>*.sites.tab.bot</code>), published by your own Tab on your own Tab account. This notice and the setup guide are plain web pages at pulltab.sites.tab.bot.</p>
+<h2>Contact</h2>
+<p>Questions: the Pull Tab Discord (link in the store listing), or contact the developer through the Even Hub listing.</p></body></html>

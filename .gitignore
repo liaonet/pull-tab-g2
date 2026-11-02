@@ -1,0 +1,46 @@
+# Pull Tab: what stays out of git.
+# Secrets (never commit): Cloudflare account/API files, the Discord webhook, any relay state or env file.
+.cloudflare-*
+.discord-*
+.env
+.env.*
+*.secret
+relay.json
+state.json
+state.*.json
+# Dependencies and build output (rebuilt from package-lock.json / sources)
+node_modules/
+dist/
+dist-test/
+*.ehpk
+.wrangler/
+__pycache__/
+# Audio (test recordings stay on the machine)
+*.pcm
+*.wav
+*.mp3
+*.m4a
+*.ogg
+*.opus
+# Local test rig state and captures
+test/rig/*.log
+test/rig/*.pid
+test/rig/netsim.mode
+test/rig/netsim.requests
+test/rig/outbox/
+test/rig/relayhome/
+test/shots/
+test/probe-*
+test/icon_preview.png
+test/last-e2e-glasses.png
+test/*-results.txt
+test/*-results.json
+# Not part of the repo: the holding page (separate site), drafts, review notes, local captures
+holding/
+listing/draft-*
+listing/phone-*.png
+listing/screenshots-preview.png
+review/
+
+# Local drafts
+MORNING_SUMMARY.txt

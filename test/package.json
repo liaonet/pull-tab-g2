@@ -1,0 +1,13 @@
+{
+  "name": "pull-tab",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "pages": "python3 ../tools/pages.py",
+    "dev": "wrangler dev"
+  },
+  "devDependencies": {
+    "wrangler": "4.152.0"
+  }
+}
