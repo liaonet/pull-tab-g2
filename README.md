@@ -71,6 +71,7 @@ test/status.sh                 # status line
 test/sent.sh                   # reply channel word and clipboard clear
 test/resume.sh                 # connection check on open and on return
 test/taps.sh                   # tap gestures with timers running and stalled
+test/lifecycle.sh              # exit signals and the single-instance guard
 test/vectors.sh python3        # app and Tab tool agree on the protocol test vector
 test/relayworker.sh python3    # relay worker and Tab tool together
 python3 test/e2e.py            # local end-to-end run with the Even simulator

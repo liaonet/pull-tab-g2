@@ -31,6 +31,8 @@
 //   sent       "Sent, reply coming by ..." for SENT_MS. 3 taps -> cancel on the relay. Timer -> idle.
 //   error      a message for ERROR_MS (or a shorter dwell), then idle. A tap clears it.
 //   2 taps from any phase opens the system exit menu.
+//   v0.1.18: the host's exit signals (SYSTEM_EXIT, ABNORMAL_EXIT), or a newer Pull Tab page taking over, shut this page
+//   down from any phase (see "lifecycle" below): mic closed, nothing sent, nothing drawn, every later event ignored.
 //
 // CONCURRENCY NOTE
 // Everything runs on one JavaScript thread, but the handlers are async and await the bridge and the network, so a new
@@ -111,6 +113,13 @@ let burstBytes = -1;                   // recBytes when a tap burst began while 
 let sentId: string | null = null;     // v0.1.8: the request just sent, cancellable by a triple-tap while "Sent" is on the lens
 let askTs: string | null = null;      // v0.1.9: the signed timestamp of the upload just started; a cancel names only this one
 let sendToken = 0;                     // bumps on every send and on every triple-tap abort
+// v0.1.18 lifecycle (closing Pull Tab from the Even phone app didn't always stop it; Even's host doesn't always
+// destroy a closed page, and a relaunch can leave the old page running beside the new one).
+let exited = false;                    // set once by shutDownSelf(): from then on this page draws, records and sends nothing
+const INSTANCE_KEY = "pt.instance";    // bridge storage (shared by every page of the app): the newest page's launch id
+let instanceId = "";                   // this page's launch id, written at boot (claim())
+let micMine = false;                   // this page opened the glasses mic and hasn't closed it yet
+const offs: (() => void)[] = [];       // removers for every listener this page added (glasses events, batteries, resume)
 // Logging is on only in debug and test builds; `DEBUG && log(...)` lets the minifier drop the calls in store builds.
 const DEBUG = __DEBUG__ || !!__TEST_AUDIO__ || !!__TEST_RELAY__;
 const log = (...a: any[]) => { if (DEBUG) console.log("[pull-tab]", ...a); };
@@ -150,6 +159,7 @@ const forgetLens = () => { onLens = ""; };
  * @param text the screen body without the status line (BLANK for a dark lens).
  */
 async function show(text: string) {
+  if (exited) return;                               // v0.1.18: a page that has shut down never writes to the lens
   lensBody = text;
   text = withStatus(text);
   lastSent = text;
@@ -184,6 +194,7 @@ let minuteTimer: any = null;
  */
 function scheduleMinute() {
   clearTimeout(minuteTimer);
+  if (exited) return;
   minuteTimer = setTimeout(() => {
     minuteTimer = null;
     if (lensBody.trim()) scheduleMinute();          // re-armed only while the lens is lit (show() arms it again when lit)
@@ -208,7 +219,7 @@ let clearTimer: any = null;
 // Stops a pending return-to-dark, e.g. because a new screen replaced the temporary one.
 function cancelClear() { clearTimeout(clearTimer); clearTimer = null; }
 // Shows the current temporary screen for `ms`, then clears the lens (restarting any earlier countdown).
-function armClear(ms: number) { cancelClear(); clearTimer = setTimeout(() => { clearLens("timer").catch(() => {}); }, ms); }
+function armClear(ms: number) { cancelClear(); if (exited) return; clearTimer = setTimeout(() => { clearLens("timer").catch(() => {}); }, ms); }
 /**
  * Returns the lens to its resting state: dark when paired, the setup text when not.
  * Does nothing while recording or uploading, because those screens must stay until their own flow ends them.
@@ -383,6 +394,7 @@ let exitAskedAt = 0, exitDialogUsed = false;
  * @param why a short reason, for the debug log only.
  */
 async function openExitDialog(why: string) {
+  if (exited) return;
   const now = Date.now();
   if (now - exitAskedAt < EXIT_AGAIN_MS) { DEBUG && log("exit dialog already requested", why); return; }
   exitAskedAt = now; exitDialogUsed = true;
@@ -391,6 +403,9 @@ async function openExitDialog(why: string) {
   DEBUG && log("exit dialog call returned", r);
 }
 let recGen = 0;                        // bumped by every start and stop of a recording; a stale mic-open is closed again
+// Closes the glasses mic (never throws). Every close goes through here so `micMine` stays true only while this page
+// holds the mic: a page that shuts down because a newer one took over must not close the newer page's mic.
+function micOff() { micMine = false; return Promise.resolve(bridge.audioControl(false)).catch(() => {}); }
 /**
  * Starts a recording (phase "listening"): opens the glasses mic, shows the listening screen, and arms the 55 s cap.
  * If not paired it shows NEEDS_SETUP and opens nothing. Every await is followed by a check of `recGen` and `phase`,
@@ -398,25 +413,32 @@ let recGen = 0;                        // bumped by every start and stop of a re
  * the mic is closed again.
  */
 async function startRec() {
-  if (phase === "listening") return;
+  if (phase === "listening" || exited) return;
   if (!paired) return showError(NEEDS_SETUP);   // no mic, nothing sent
   cancelClear();
   burstBytes = -1; chunks = []; recBytes = 0; silenceMs = 0; heardVoice = false;
   phase = "listening";
   const myRec = ++recGen;
-  const openMic = async () => (await bridge.audioControl(true, AudioInputSource.Glasses).catch(() => false)) || !!__TEST_AUDIO__;
+  // v0.1.18: before the mic opens, check that no newer Pull Tab page has taken over; if one has, this page shuts down.
+  if (!(await stillCurrent("mic"))) return;
+  if (myRec !== recGen || phase !== "listening") return;
+  const openMic = async () => {
+    const on = (await Promise.resolve(bridge.audioControl(true, AudioInputSource.Glasses)).catch(() => false)) || !!__TEST_AUDIO__;
+    if (on) micMine = true;
+    return on;
+  };
   let ok = await openMic();
-  if (myRec !== recGen || phase !== "listening") { await bridge.audioControl(false).catch(() => {}); return; }
+  if (myRec !== recGen || phase !== "listening") { await micOff(); return; }
   if (!ok && exitDialogUsed) {         // known glasses bug: the mic can be refused after a cancelled exit menu; ask once more
     DEBUG && log("mic refused after the exit dialog; asking once more");
-    await bridge.audioControl(false).catch(() => {}); await new Promise((r) => setTimeout(r, 300));
+    await micOff(); await new Promise((r) => setTimeout(r, 300));
     if (myRec !== recGen || phase !== "listening") return;
     ok = await openMic();
     DEBUG && log("mic re-arm", ok ? "worked" : "refused again");
-    if (myRec !== recGen || phase !== "listening") { await bridge.audioControl(false).catch(() => {}); return; }
+    if (myRec !== recGen || phase !== "listening") { await micOff(); return; }
   }
   if (!ok) {
-    await bridge.audioControl(false).catch(() => {});
+    await micOff();
     return showError(exitDialogUsed ? `${NAME}\n\nThe glasses refused the mic after the exit menu.\nDouble-tap to exit, then reopen Pull Tab.` : `${NAME}\n\nCouldn't open the glasses mic.\nCheck the mic permission, then try again.`);
   }
   await show(`${NAME}  * listening\n\nTriple-tap to send.\nDouble-tap to exit.`);
@@ -450,9 +472,11 @@ function onAudio(ev: any) {
 // A recording that reaches the cap is thrown away, never sent: mic closed, audio dropped, a brief "Not sent".
 async function discardRec(why: string) {
   if (phase !== "listening") return;
+  if (!(await stillCurrent("cap"))) return;   // a superseded page's cap never touches the mic
+  if (phase !== "listening") return;
   clearTimeout(recTimer); recGen++; chunks = []; recBytes = 0;
   resetTaps();
-  await bridge.audioControl(false).catch(() => {});
+  await micOff();
   DEBUG && log("recording discarded, not sent:", why);
   phase = "error";
   await show(NOT_SENT); armClear(NOT_SENT_MS);
@@ -471,7 +495,7 @@ async function stopRec(send: boolean, silent = false) {
   askTs = null;                           // v0.1.9: no upload of this recording yet, so a triple-tap names none
   const tok = sendToken;
   clearTimeout(recTimer); recGen++;
-  await bridge.audioControl(false).catch(() => {});
+  await micOff();
   if (tok !== sendToken) return;          // triple-tapped while the mic was closing: abortAll owns the lens
   if (silent) { chunks = []; return showError(`${NAME}\n\nDidn't hear anything.\nTriple-tap to try again.`); }
   if (!send) { chunks = []; phase = "idle"; return clearLens("cancelled"); }
@@ -523,8 +547,15 @@ const sentScreen = (word: string) => `${NAME}\n\nSent, reply coming by ${word}.\
  * @param pcm the recording (raw PCM). Released as soon as it is sealed, to keep memory low in the WebView.
  */
 async function ask(pcm: Uint8Array) {
-  const ts = String(Date.now()); askTs = ts;   // v0.1.9: set before any await, so a triple-tap from here on names this upload
-  phase = "sending"; await show(`${NAME}\n\nSending...`);
+  phase = "sending";
+  // v0.1.18: before anything is sent, check that no newer Pull Tab page has taken over (if one has, this page shuts
+  // down and the recording is dropped). A triple-tap cancel during this check bumps sendToken: then nothing is sent.
+  const before = sendToken;
+  if (!(await stillCurrent("send")) || before !== sendToken) return;
+  const ts = String(Date.now()); askTs = ts;   // v0.1.9: set before the next await, so a triple-tap from here on names this upload
+  await show(`${NAME}\n\nSending...`);
+  // An exit, or a triple-tap cancel, while "Sending..." was being drawn: nothing is uploaded.
+  if (exited || sendToken !== before) return;
   const token = ++sendToken;
   try {
     // 0.1.13 (refactor 2): seal, then let go of the plain audio, so only the sealed copy is held during the upload.
@@ -603,7 +634,7 @@ function settleStale() {
 async function onTap(n: number) {
   lastTapAt = Date.now();                  // before any await: a tap that lands during a settle still extends this burst
   const first = taps === 0;
-  if (first) burstPhase = phase;
+  if (first) { burstPhase = phase; stillCurrent("tap").catch(() => {}); }   // v0.1.18: a superseded page shuts down before its burst is decided
   taps += n; clearTimeout(tapTimer); tapTimer = null;
   if (taps >= 3) { DEBUG && log("taps", taps, "-> triple"); resetTaps(); await onTriple(); return; }
   tapTimer = setTimeout(() => { resolveTaps().catch((x) => DEBUG && log("tap error", x)); }, TAP_WINDOW_MS);
@@ -648,7 +679,7 @@ async function exitByDoubleTap() {
 async function dropRecordingForExit() {
   clearTimeout(recTimer); recGen++; chunks = []; recBytes = 0; sendToken++;
   phase = "idle";
-  await bridge.audioControl(false).catch(() => {});
+  await micOff();
   DEBUG && log("recording discarded, not sent: double-tap exit");
   await clearLens("double-tap exit");
 }
@@ -667,7 +698,7 @@ async function abortAll() {
   const wasBusy = was === "listening" || was === "sending" || (was === "sent" && !!sentId);
   sendToken++;
   clearTimeout(recTimer); chunks = [];
-  if (was === "listening") { recGen++; await bridge.audioControl(false).catch(() => {}); }
+  if (was === "listening") { recGen++; await micOff(); }
   try { sendCtl?.abort(); } catch {}
   const id = was === "sent" ? sentId : null;
   const ts = was === "sending" || id ? askTs : null;
@@ -713,9 +744,16 @@ function evType(e: any) {
  * onTap(), scroll to extending an error's dwell, and system overlay open/close to housekeeping only.
  */
 async function onEvent(e: any) {
+  if (exited) return;                                            // v0.1.18: a page that has shut down ignores everything
+  const t = e?.audioEvent ? undefined : evType(e);
+  // v0.1.18: the host's exit signals (Even's lifecycle: release everything on both). Not FOREGROUND_EXIT (5): that only
+  // means a system overlay opened or closed (see below). Phone lock or a hidden phone page is not an exit either.
+  if (t === OsEventTypeList.SYSTEM_EXIT_EVENT || t === OsEventTypeList.ABNORMAL_EXIT_EVENT) {
+    return shutDownSelf(t === OsEventTypeList.SYSTEM_EXIT_EVENT ? "system exit" : "abnormal exit", true);
+  }
   const late = settleStale(); if (late) await late;
+  if (exited) return;
   if (e?.audioEvent) return onAudio(e.audioEvent);
-  const t = evType(e);
   switch (t) {
     case OsEventTypeList.CLICK_EVENT: await onTap(1); break;
     case OsEventTypeList.DOUBLE_CLICK_EVENT: await onTap(2); break;
@@ -740,6 +778,71 @@ async function onEvent(e: any) {
       break;
   }
 }
+// ---------- lifecycle (v0.1.18) ----------
+// Reported Nov 3 2026: Pull Tab "would not close" from the Even phone app, even after restarting the Even app.
+// Even's host doesn't always destroy a closed plugin page (Even staff, Sep 2026: no exit event is sent on a phone-side
+// close; everything-evenhub#16: a relaunch can leave the old page running beside the new one, until the Even app is
+// force-quit). The app can't destroy its own WebView, so it makes sure a page that should be gone does nothing:
+//   1. On the host's exit signals (SYSTEM_EXIT 7, ABNORMAL_EXIT 6) it shuts itself down (shutDownSelf).
+//   2. Single instance: every page writes a fresh launch id to bridge storage at boot (claim). Before it opens the mic,
+//      before it sends, and on the first tap of a burst, a page reads the id back (stillCurrent); if a newer page has
+//      written its own, this one shuts itself down. The person's Tab, relay and pairing are untouched.
+//   3. A phone page that is hidden (phone locked, Even app in the background) is NOT an exit: Pull Tab keeps working
+//      with the phone in a pocket. A page that comes back into view claims the launch id again, because the page the
+//      person is looking at is the live one (the host may have run a background copy meanwhile; Even's
+//      background-state notes describe one).
+/** Writes this page's launch id as the newest (at boot, and when the phone page comes back into view). */
+async function claim(why: string) {
+  if (exited) return;
+  if (!instanceId) instanceId = b64u(random(12));
+  await save(INSTANCE_KEY, instanceId);
+  DEBUG && log("instance claimed", why);
+}
+/**
+ * Single-instance check. Reads the newest launch id; if it is another page's, shuts this page down.
+ * @returns false when this page has shut down (now or earlier), true otherwise (also when storage can't answer).
+ */
+async function stillCurrent(why: string) {
+  if (exited) return false;
+  if (!instanceId) return true;
+  const v = await load(INSTANCE_KEY);
+  if (exited) return false;
+  if (v && v !== instanceId) { await shutDownSelf(`a newer Pull Tab page took over (${why})`, false); return false; }
+  return true;
+}
+/**
+ * Releases everything, once, and leaves the page inert: the glasses mic is closed, a recording in progress is dropped
+ * (never sent), an upload in flight is aborted and cancelled on the relay, every timer is cleared, every listener is
+ * removed, and from then on no event, tap, lens write or exit menu is acted on. A request already accepted by the relay
+ * ("Sent") is left alone: it was sent.
+ * @param why a short reason, for the debug log only.
+ * @param hostExit true for the host's exit signals (this page is the one exiting, so a recording's mic is closed even
+ *   if the open was never confirmed); false when a newer page took over. Either way the mic is closed only while this
+ *   page is still the current one: a newer page took the mic at its boot, and its mic is never touched.
+ */
+async function shutDownSelf(why: string, hostExit: boolean) {
+  if (exited) return;
+  exited = true;
+  const was = phase, ts = was === "sending" ? askTs : null;
+  const closeMic = micMine || (hostExit && was === "listening");
+  clearTimeout(recTimer); clearTimeout(tapTimer); clearTimeout(clearTimer); clearTimeout(minuteTimer);
+  recTimer = null; tapTimer = null; clearTimer = null; minuteTimer = null; taps = 0;
+  recGen++; sendToken++; chunks = []; recBytes = 0; burstBytes = -1; sentId = null; askTs = null; phase = "idle";
+  try { sendCtl?.abort(); } catch {}
+  for (const off of offs.splice(0)) { try { off(); } catch {} }
+  DEBUG && log("shut down:", why, "phase was", was);
+  // An upload in flight may already have reached the relay: its tombstone stops it there (as a triple-tap cancel does).
+  if (ts && paired) relay("POST", "/v1/cancel", TE.encode(ts)).catch(() => {});
+  // The phone screen, if still shown, says so and its buttons do nothing (a stale page must not replace the pairing).
+  try {
+    for (const id of ["copy", "msg", "use", "userelay", "reset"]) { const el = $(id); if (el) el.onclick = (e: any) => { e?.preventDefault?.(); }; }
+    const st = $("state"); if (st) { st.textContent = "Pull Tab was closed. Open it again from the Even app."; st.className = ""; }
+  } catch {}
+  // The mic is the glasses', not this page's; only the current page may close it, so a
+  // superseded page never closes it under the newer page (which took the mic at its boot).
+  if (closeMic) { const v = await load(INSTANCE_KEY); if (!v || v === instanceId) await micOff(); }
+}
+
 // ---------- phone screen (setup) ----------
 // The fingerprints come from this app build (signed into the store package), not from the website, so a Tab can
 // tell whether what it downloads is what this app version was built with.
@@ -752,6 +855,7 @@ function setupMessage() { return `Set up Pull Tab for my Even G2 glasses. Guide:
  * @param status optional status line to show; omitted means keep the current one.
  */
 function renderPhone(status?: string) {
+  if (exited) return;                    // v0.1.18: a page that has shut down keeps its "closed" note
   if (status !== undefined) { $("state").textContent = status; DEBUG && log("phone:", status); }
   $("state").className = paired ? "ok" : "";
   $("msg").value = paired ? "" : setupMessage();
@@ -826,6 +930,7 @@ function wirePhone() {
  */
 async function boot() {
   bridge = await waitForEvenAppBridge();
+  await claim("launch");                  // v0.1.18: this page is now the newest; an older one shuts down at its next action
   let s = await load("pt.secret");
   if (!s) { s = b64u(random(32)); await save("pt.secret", s); }
   keys = keysFrom(unb64u(s));
@@ -841,20 +946,27 @@ async function boot() {
       paddingLength: 6, ...MAIN, content: withStatus(paired ? IDLE : UNPAIRED), isEventCapture: 1 })],
   }));
   DEBUG && log("startup", res);
-  bridge.onEvenHubEvent((e: any) => { onEvent(e).catch((x) => DEBUG && log("event error", x)); });
-  batteries.start();
+  await micOff();   // a ghost page may still hold the glasses mic; this page owns it from here
+  const keep = (off: any) => { if (typeof off === "function") offs.push(off); };   // v0.1.18: removed by shutDownSelf()
+  keep(bridge.onEvenHubEvent((e: any) => { onEvent(e).catch((x) => DEBUG && log("event error", x)); }));
+  keep(batteries.start());
   scheduleMinute();
   await showHint();
+  if (exited) return;
   // v0.1.10: the status shows by itself, once on open and once on each return to the screen (no button, no polling).
   // On open the lens hint follows the result, as before; on a return the lens is lit only when this check is what
   // connected the app (the person's Tab just finished setup), the moment 0.1.9's check button used to cover.
-  checkOnOpenAndResume(document as any, window as any, async (why) => {
+  keep(checkOnOpenAndResume(document as any, window as any, async (why) => {
+    if (exited) return;
+    // v0.1.18: the page in view is the live one. Only when it really is in view (a hidden ghost
+    // WebView can still get a focus event).
+    if (why === "resume" && document.visibilityState !== "hidden") await claim("phone page shown again");
     const was = paired; DEBUG && log("status check on", why);
     if (why === "resume") renderPhone("Checking connection...");
     const ok = await checkPaired();
     if (phase !== "idle" || clearTimer) return;
     if (why === "open" ? ok !== null : ok && !was) await showHint();
-  }, log);
+  }, log));
   if (__TEST_AUDIO__) DEBUG && log("TEST-ONLY setup message:", setupMessage());   // compiled out of real builds
   DEBUG && log("ready", "v" + __VERSION__, relayBase());
 }

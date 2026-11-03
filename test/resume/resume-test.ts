@@ -3,6 +3,8 @@ import { checkOnOpenAndResume } from "../../app/src/resume";
 const r: { name: string; ok: boolean; detail: string }[] = [];
 const test = (name: string, ok: any, detail = "") => r.push({ name, ok: !!ok, detail });
 class E { h = new Map<string, Function[]>(); addEventListener(k: string, f: Function) { this.h.set(k, [...(this.h.get(k) || []), f]); }
+  removeEventListener(k: string, f: Function) { this.h.set(k, (this.h.get(k) || []).filter(x => x !== f)); }
+  count() { let n = 0; this.h.forEach(v => { n += v.length; }); return n; }
   fire(k: string, arg: any = {}) { (this.h.get(k) || []).forEach(f => f(arg)); } }
 const sleep = (ms = 5) => new Promise(done => setTimeout(done, ms));
 async function main() {
@@ -25,6 +27,13 @@ async function main() {
   const d3 = Object.assign(new E(), { visibilityState: "visible" }); const w3 = new E(); let failures = 0;
   checkOnOpenAndResume(d3, w3, async () => { failures++; if (failures === 1) throw Error("network failed"); });
   await sleep(); w3.fire("blur"); w3.fire("focus"); await sleep(); test("a failed check does not block the next return", failures === 2, String(failures));
+  // 0.1.18: the returned function removes every listener (main.ts calls it when Pull Tab exits); no check runs after it
+  const d4 = Object.assign(new E(), { visibilityState: "visible" }); const w4 = new E(); let runs4 = 0;
+  const off = checkOnOpenAndResume(d4, w4, async () => { runs4++; }); await sleep();
+  const had = d4.count() + w4.count(); off();
+  test("0.1.18 the remover takes every listener off", had === 5 && d4.count() + w4.count() === 0, `${had} -> ${d4.count() + w4.count()}`);
+  w4.fire("blur"); w4.fire("focus"); d4.visibilityState = "hidden"; d4.fire("visibilitychange"); d4.visibilityState = "visible"; d4.fire("visibilitychange"); await sleep();
+  test("0.1.18 no check after removal", runs4 === 1, String(runs4));
   const fail = r.filter(x => !x.ok); for (const x of r) console.log((x.ok ? "PASS " : "FAIL ") + x.name + (x.detail ? " (" + x.detail + ")" : ""));
   console.log(`${r.length - fail.length}/${r.length} passed`); if (fail.length) process.exit(1);
 }

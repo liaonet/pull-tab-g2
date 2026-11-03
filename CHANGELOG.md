@@ -3,6 +3,10 @@
 Newest first. Older entries describe the gestures of their time; the README and docs/ARCHITECTURE.md describe the
 current version.
 
+## 0.1.18
+
+Lifecycle only: no change to the taps, the lens text, the relay or the protocol. Even's host doesn't always destroy a plugin page closed from the phone (that close sends no exit event), and a relaunch can leave the old page running beside the new one, so the app makes a page that should be gone do nothing. On the host's exit signals (SYSTEM_EXIT 7, ABNORMAL_EXIT 6) the page shuts itself down: the glasses mic is closed, a recording is dropped (never sent), an upload in flight is aborted and cancelled on the relay, every timer and listener is removed, and every later event is ignored. FOREGROUND_EXIT (5) is still not an exit. Single instance: each launch writes a fresh launch id (`pt.instance`) to bridge storage; before opening the mic, before sending, and on the first tap of a burst a page reads it back, and if a newer page has taken over, the older one shuts itself down. A new page takes the glasses mic at boot, and only the current page ever closes it. A hidden phone page (phone locked) is still not an exit; a page that comes back into view claims the launch id again. New `test/lifecycle.sh` (18 scenarios). `setup.md`, `pulltab.py` and the relay template are unchanged, so the three file fingerprints are unchanged.
+
 ## 0.1.17
 
 Phone screen only. The Tab invite line now sits directly under the status pill, so it shows without scrolling on both phone screens: the setup screen a new user sees first and the paired screen. It reads "Not Invited to TAB yet? Apply here!" and links to the same invite; it appears once, still above the Privacy statement. Nothing on the lens, the relay, the protocol, `setup.md` or `pulltab.py` changed, so the three file fingerprints are unchanged.

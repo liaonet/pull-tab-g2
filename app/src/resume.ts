@@ -8,13 +8,14 @@
 // open/resume nothing is checked. A resume while a check is still running doesn't start a second one, and the two
 // events a phone may fire for one return (visibilitychange and focus) count once.
 // Inputs: the document and window (any objects with addEventListener, so tests can pass fakes) and the check to run.
-// Output: none; the check's own result is handled by the caller (main.ts boot()).
+// Output: a function that removes every listener this added (0.1.18: main.ts calls it when Pull Tab exits); the check's
+// own result is handled by the caller (main.ts boot()).
 //
 // Why several events: Android and iOS WebViews differ in which of visibilitychange, blur/focus and pagehide/pageshow
 // they fire when the person switches apps or locks the phone, so all of them are watched and folded into one
 // "away / back" state. pageshow with `persisted` means the page came back from the back-forward cache.
 // The minimal event-target shape used here, so tests can pass a fake window and document.
-type Target = { addEventListener(type: string, fn: (e: any) => void): void };
+type Target = { addEventListener(type: string, fn: (e: any) => void): void; removeEventListener?(type: string, fn: (e: any) => void): void };
 /** A document-like target: events plus the page's visibilityState ("visible" or "hidden"). */
 export type Doc = Target & { visibilityState?: string };
 
@@ -24,9 +25,10 @@ export type Doc = Target & { visibilityState?: string };
  * @param win the window (for blur, focus, pagehide, pageshow).
  * @param check the signed connection check; errors are caught and logged, never thrown.
  * @param log optional debug logger.
- * Side effects: adds event listeners for the life of the page; there is no way to remove them, as none is needed.
+ * Side effects: adds event listeners until the returned function is called (0.1.18: main.ts calls it when Pull Tab exits).
+ * @returns a function that removes the listeners again; afterwards no check runs.
  */
-export function checkOnOpenAndResume(doc: Doc, win: Target, check: (why: "open" | "resume") => Promise<unknown>, log?: (...a: any[]) => void) {
+export function checkOnOpenAndResume(doc: Doc, win: Target, check: (why: "open" | "resume") => Promise<unknown>, log?: (...a: any[]) => void): () => void {
   let away = false, busy = false;
   const run = (why: "open" | "resume") => {
     if (busy) { log?.("status check already running:", why, "skipped"); return; }
@@ -35,10 +37,17 @@ export function checkOnOpenAndResume(doc: Doc, win: Target, check: (why: "open" 
   };
   const leave = () => { away = true; };
   const back = () => { if (!away) return; away = false; run("resume"); };
-  doc.addEventListener("visibilitychange", () => { if (doc.visibilityState === "hidden") leave(); else back(); });
+  const vis = () => { if (doc.visibilityState === "hidden") leave(); else back(); };
+  const show = (e: any) => { if (e && e.persisted) { away = true; back(); } };
+  doc.addEventListener("visibilitychange", vis);
   win.addEventListener("blur", leave);
   win.addEventListener("focus", back);
   win.addEventListener("pagehide", leave);
-  win.addEventListener("pageshow", (e: any) => { if (e && e.persisted) { away = true; back(); } });
+  win.addEventListener("pageshow", show);
   run("open");
+  return () => {
+    away = false;
+    try { doc.removeEventListener?.("visibilitychange", vis); win.removeEventListener?.("blur", leave); win.removeEventListener?.("focus", back);
+      win.removeEventListener?.("pagehide", leave); win.removeEventListener?.("pageshow", show); } catch {}
+  };
 }

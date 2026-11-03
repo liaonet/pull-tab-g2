@@ -1,7 +1,7 @@
 # Pull Tab architecture
 
 This is the map for a developer opening the repo for the first time. The version history is in
-`CHANGELOG.md`; this page explains how the pieces fit together today (v0.1.17).
+`CHANGELOG.md`; this page explains how the pieces fit together today (v0.1.18).
 
 ## What the product is
 
@@ -137,7 +137,7 @@ keep the app correct across that:
 ```
 cd app && npm ci && npx vite build          # output in app/dist (index.html + one JS bundle)
 cd ../test && npm ci && cd ..               # test tools (wrangler, which brings esbuild)
-test/relay.sh; test/sent.sh; test/resume.sh; test/status.sh; test/taps.sh
+test/relay.sh; test/sent.sh; test/resume.sh; test/status.sh; test/taps.sh; test/lifecycle.sh
 test/vectors.sh python3                     # python with `cryptography`
 test/relayworker.sh python3                 # python with `requests` and `cryptography`
 python3 test/e2e.py                         # full local run in the Even simulator; needs test/rig/q.pcm
@@ -146,13 +146,31 @@ python3 test/e2e.py                         # full local run in the Even simulat
 Packaging for Even Hub: `npx evenhub pack app.json dist -o pull-tab-<version>.ehpk --sdk-ver 0.0.16` from `app/`, then
 upload through the Even Hub developer portal.
 
+### Lifecycle and single instance (0.1.18)
+
+Even's host doesn't always destroy a plugin page it has closed (a phone-side close sends no exit event, and a relaunch can
+leave the old page running beside the new one), and JavaScript can't destroy its own WebView. So `main.ts` makes a page
+that should be gone inert:
+
+- `onEvent` turns SYSTEM_EXIT (7) and ABNORMAL_EXIT (6) into `shutDownSelf()`: mic closed, recording dropped, an upload
+  in flight aborted and cancelled on the relay, all timers cleared, all listeners removed (the SDK's unsubscribe
+  functions, plus `resume.ts`'s remover), `exited` set so every later event, lens write and exit menu is ignored.
+  FOREGROUND_EXIT (5) is not an exit: it fires when an overlay opens or closes.
+- `claim()` writes a fresh launch id to bridge storage (`pt.instance`) at boot, and again when the phone page comes back
+  into view (visible, not just focused). `stillCurrent()` reads it before the mic opens, before a send and on the first tap of a burst; a different
+  id means a newer page took over, and this page shuts itself down. A new page closes the glasses mic at boot (a ghost
+  may hold it), and a page closes the mic only while it is the current one.
+- A hidden page is never treated as an exit, so the phone can be locked in a pocket.
+
+`test/lifecycle.sh` covers all of this with the real app and SDK on a mocked host.
+
 ### Fingerprinted files: edit with care
 
 `vite.config.mjs` hashes `site/setup.md`, `site/files/pulltab.py` and `site/files/relay-worker.template.mjs` into the
 app bundle, and the setup message tells the Tab to refuse any file whose hash differs. Any edit to those three files,
 including a comment, changes the app build and must ship together with a new app release and a site deploy. They are
-not re-commented on each release for that reason; their own header comments describe them, and this page describes how
-they fit in.
+not re-commented on each release for that reason (0.1.18 leaves them unchanged); their own header comments describe
+them, and this page describes how they fit in.
 
 ### Codes in comments
 

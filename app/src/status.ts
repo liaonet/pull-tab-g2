@@ -56,9 +56,13 @@ export class Batteries {
   private lastAsk = 0;
   // onPush (0.1.13, optional): runs on every device status push, e.g. so the app redraws the lens after a reconnect.
   constructor(private bridge: any, private onChange: () => void, private onPush?: () => void) {}
-  /** Listens for device status pushes (call refresh() first for the starting levels). */
-  start() {
-    try { this.bridge.onDeviceStatusChanged((s: any) => this.onStatus(s)); } catch {}
+  /**
+   * Listens for device status pushes (call refresh() first for the starting levels).
+   * @returns the SDK's unsubscribe function (or null if subscribing failed), so main.ts can stop the pushes when Pull
+   * Tab exits.
+   */
+  start(): (() => void) | null {
+    try { const off = this.bridge.onDeviceStatusChanged((s: any) => this.onStatus(s)); return typeof off === "function" ? off : null; } catch { return null; }
   }
   /** One getDeviceInfo call, at most every 30 s (it is only asked again when a push names a device we don't know). */
   async refresh() {

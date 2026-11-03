@@ -77,6 +77,12 @@ async function main() {
   check("sdk_ring_only_when_host_says_ring1", b3.ring === 60 && b3.glasses === null, `${b3.glasses}/${b3.ring}`);
   push({ sn: "R1-1", connectType: "connected", batteryLevel: 58 }); await tick();
   check("sdk_ring_push_updates_ring", b3.ring === 58, String(b3.ring));
+  // 0.1.18: start() returns the SDK's unsubscribe; after it, pushes change nothing (main.ts calls it when Pull Tab exits)
+  const b18 = new Batteries(bridge, () => {}); glassesInfo = { model: "g2", sn: "G2-4", status: { sn: "G2-4", connectType: "connected", batteryLevel: 50 } };
+  await b18.refresh(); const off4 = b18.start();
+  check("sdk_start_returns_unsubscribe", typeof off4 === "function", typeof off4);
+  off4?.(); push({ sn: "G2-4", connectType: "connected", batteryLevel: 44 }); await tick();
+  check("sdk_no_push_after_unsubscribe", b18.glasses === 50, String(b18.glasses));
 
   glassesInfo = { model: "g2", sn: "G2-2" };  // no status: the SDK fills batteryLevel 0, which must not show as 0%
   const b4 = new Batteries(bridge, () => {}); await b4.refresh();
