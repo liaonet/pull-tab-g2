@@ -3,6 +3,10 @@
 Newest first. Older entries describe the gestures of their time; the README and docs/ARCHITECTURE.md describe the
 current version.
 
+## 0.1.17
+
+Phone screen only. The Tab invite line now sits directly under the status pill, so it shows without scrolling on both phone screens: the setup screen a new user sees first and the paired screen. It reads "Not Invited to TAB yet? Apply here!" and links to the same invite; it appears once, still above the Privacy statement. Nothing on the lens, the relay, the protocol, `setup.md` or `pulltab.py` changed, so the three file fingerprints are unchanged.
+
 ## 0.1.16
 
 A tap burst is also settled by the clock (settleStale() on every event), so a burst timer that stalled while the phone slept can't turn a later single tap into a recording; the double-tap still exits once.

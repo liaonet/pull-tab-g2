@@ -229,10 +229,13 @@ def main():
     # 0.1.10: a permanent "Get help on Discord" link on the phone screen, apart from the 3 help points
     check("phone_discord_help_link", re.search(r'<a class="link" id="discord" href="https://discord\.gg/j4kBHPkvC8" target="_blank" rel="noopener">Get help on Discord</a>', ix) is not None
           and "discord" not in ix.split('<ol id="help">')[1].split("</ol>")[0] and ix.index('id="discord"') > ix.index('id="connected"'), "")
-    # 0.1.10: "Not a TAB member? Join here" under the Discord link, "Join here" to a Tab invite, not a help point
+    # 0.1.10: an invite line linking to a Tab invite, not a help point.
+    # 0.1.17: above the fold as "Not Invited to TAB yet? Apply here!", directly under the status pill so it shows without
+    # scrolling on the setup screen a new user sees first and on the paired screen. Still above Privacy, and only once.
     INVITE = "https://tab.bot/r/F97BF7357521A088"
-    check("phone_join_invite_link", re.search(r'<p class="join" id="joinline">Not a TAB member\? <a id="join" href="https://tab\.bot/r/F97BF7357521A088" target="_blank" rel="noopener">Join here</a></p>', ix) is not None
-          and "tab.bot/r/" not in ix.split('<ol id="help">')[1].split("</ol>")[0] and ix.index('id="discord"') < ix.index('id="joinline"') < ix.index('id="reset"'), "")
+    check("phone_join_invite_link", re.search(r'<span id="state">Starting\.\.\.</span>\n<p class="join" id="joinline">Not Invited to TAB yet\? <a id="join" href="https://tab\.bot/r/F97BF7357521A088" target="_blank" rel="noopener">Apply here!</a></p>\n', ix) is not None
+          and ix.count('id="joinline"') == 1 and ix.count("tab.bot/r/") == 1
+          and "tab.bot/r/" not in ix.split('<ol id="help">')[1].split("</ol>")[0] and ix.index('id="state"') < ix.index('id="joinline"') < ix.index('id="setup"') < ix.index('id="connected"') < ix.index('<h2>Privacy</h2>') < ix.index('id="discord"'), "")
     check("site_join_invite_link", f'<p>Not a TAB member? <a href="{INVITE}">Join here</a></p>' in (ROOT / "site" / "index.html").read_text(), "")
     png = phone_shot("phone-unpaired-0.1.10.png"); w, dark = button_rows(png)
     check("phone_screen_buttons_render_white", w > 30 and dark == 0, f"white rows {w}, dark rows {dark}")
@@ -685,7 +688,7 @@ def main():
     check("phone_connected_screen_no_dark_buttons", dark == 0, f"dark rows {dark}")
     check("reset_link_shown", p0.get("reset") == "Reset pairing" and p0.get("setup") == "none", str({k: p0.get(k) for k in ("reset", "setup")}))
     check("discord_link_shown_when_connected", p0.get("discord") == "Get help on Discord" and p0.get("dvis") is True, str({k: p0.get(k) for k in ("discord", "dvis")}))
-    check("join_invite_link_shown_when_connected", p0.get("join") == "Not a TAB member? Join here" and p0.get("jhref") == "https://tab.bot/r/F97BF7357521A088" and p0.get("jvis") is True,
+    check("join_invite_link_shown_when_connected", p0.get("join") == "Not Invited to TAB yet? Apply here!" and p0.get("jhref") == "https://tab.bot/r/F97BF7357521A088" and p0.get("jvis") is True,
           str({k: p0.get(k) for k in ("join", "jhref", "jvis")}))
     ARMED = "Tap again to replace the pairing code. Then send the new setup message to your Tab, so it shuts down the old code"
     check("reset_link_first_tap", phone_tap(p0.get("x", 0), p0.get("y", 0)) and (time.sleep(0.8) or True))

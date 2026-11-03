@@ -1,7 +1,7 @@
 # Pull Tab architecture
 
 This is the map for a developer opening the repo for the first time. The version history is in
-`CHANGELOG.md`; this page explains how the pieces fit together today (v0.1.16).
+`CHANGELOG.md`; this page explains how the pieces fit together today (v0.1.17).
 
 ## What the product is
 
