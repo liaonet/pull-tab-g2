@@ -1,6 +1,5 @@
-// status.ts: builds the status line and tracks battery levels for main.ts. Output: a one-line string such as
-// "14:05  Mon 2 Nov  |  Glasses 80%".
-// Status line at the top of the lens: time, date, glasses battery, ring battery.
+// status.ts: the status line at the top of every lit lens screen (time, date, glasses and ring battery), and the battery
+// levels behind it. Output: a one-line string such as "14:05  Mon 2 Nov  |  Glasses 80%".
 // Time and date come from the phone's clock. Battery comes from the Even Hub SDK 0.0.16:
 //   bridge.getDeviceInfo(): Promise<DeviceInfo | null>  (host method "getGlassesInfo"; DeviceInfo.model is g1|g2|ring1,
 //                                                        DeviceInfo.status.batteryLevel is 0-100)
@@ -54,13 +53,11 @@ export class Batteries {
   private glassesSn = "";
   private ringSn = "";
   private lastAsk = 0;
-  // onPush (0.1.13, optional): runs on every device status push, e.g. so the app redraws the lens after a reconnect.
+  // onPush (optional) runs on every device status push; main.ts uses it to rewrite the lens at its next draw, since a
+  // push may follow a reconnect.
   constructor(private bridge: any, private onChange: () => void, private onPush?: () => void) {}
-  /**
-   * Listens for device status pushes (call refresh() first for the starting levels).
-   * @returns the SDK's unsubscribe function (or null if subscribing failed), so main.ts can stop the pushes when Pull
-   * Tab exits.
-   */
+  // Listens for pushes (call refresh() first for the starting levels). Returns the SDK's unsubscribe function, or null
+  // if subscribing failed; main.ts calls it when Pull Tab is turned off.
   start(): (() => void) | null {
     try { const off = this.bridge.onDeviceStatusChanged((s: any) => this.onStatus(s)); return typeof off === "function" ? off : null; } catch { return null; }
   }
@@ -74,7 +71,7 @@ export class Batteries {
     if (model === "ring1") { this.ringSn = d.sn; this.set("ring", level(d.status)); }
     else if (model === "g1" || model === "g2") { this.glassesSn = d.sn; this.set("glasses", level(d.status)); }
   }
-  /** Handles one device status push: notify the app (lens redraw), then update the matching level by serial number. */
+  // Handles one device status push: notify the app (lens redraw), then update the matching level by serial number.
   onStatus(s: any) {
     try { this.onPush?.(); } catch {}
     if (!s || !s.sn) return;

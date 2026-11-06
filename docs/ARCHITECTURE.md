@@ -1,7 +1,7 @@
 # Pull Tab architecture
 
-This is the map for a developer opening the repo for the first time. The version history is in
-`CHANGELOG.md`; this page explains how the pieces fit together today (v0.1.18).
+This is the map for a developer opening the repo for the first time. CHANGELOG.md keeps the version history, including
+every mistake fixed; this page explains how the pieces fit together today (v2.0.0).
 
 ## What the product is
 
@@ -146,33 +146,38 @@ python3 test/e2e.py                         # full local run in the Even simulat
 Packaging for Even Hub: `npx evenhub pack app.json dist -o pull-tab-<version>.ehpk --sdk-ver 0.0.16` from `app/`, then
 upload through the Even Hub developer portal.
 
-### Lifecycle and single instance (0.1.18)
+### Lifecycle and single instance (2.0.0)
 
-Even's host doesn't always destroy a plugin page it has closed (a phone-side close sends no exit event, and a relaunch can
-leave the old page running beside the new one), and JavaScript can't destroy its own WebView. So `main.ts` makes a page
-that should be gone inert:
+Even closes a plugin in three ways: the exit menu (double-tap, then SYSTEM_EXIT 7), a close from the phone (no signal
+reaches the page, and the Even app may leave the WebView running), and an abnormal exit (ABNORMAL_EXIT 6, which may also
+be a Bluetooth drop). Before Even opens a plugin it shuts down the previous session on the glasses and waits for the
+glasses to confirm; if that confirmation never comes, the next launch fails with "Failed to load: Bad state: Host shutdown
+did not complete". 0.1.18 sent a mic-close at every launch and during Even's own teardown, and that is the suspected cause
+of exactly this failure (CHANGELOG.md). So the rule in `main.ts` is: **no glasses command at launch beyond creating and
+drawing the page, and none on any exit path; the host releases the mic.**
 
-- `onEvent` turns SYSTEM_EXIT (7) and ABNORMAL_EXIT (6) into `shutDownSelf()`: mic closed, recording dropped, an upload
-  in flight aborted and cancelled on the relay, all timers cleared, all listeners removed (the SDK's unsubscribe
-  functions, plus `resume.ts`'s remover), `exited` set so every later event, lens write and exit menu is ignored.
-  FOREGROUND_EXIT (5) is not an exit: it fires when an overlay opens or closes.
+- `life` is `on`, `paused` or `off`. `halt()` stops all work without any bridge call: recording dropped (never sent),
+  upload aborted and withdrawn on the relay (a network call, not a glasses one), timers cleared, `micMine` forgotten.
+- SYSTEM_EXIT: `halt("off")` also removes every listener (the SDK's unsubscribe functions, plus `resume.ts`'s remover)
+  and leaves the phone page inert. Nothing turns it back on.
+- ABNORMAL_EXIT: `halt("paused")` keeps the listeners. Input is ignored until a tap reaches the page, which means Even is
+  routing input to it again; that tap makes the page live and is handled as usual.
+- `micOff()` asks the glasses to close the mic only if Pull Tab asked for it (`micMine`) and the page is live.
 - `claim()` writes a fresh launch id to bridge storage (`pt.instance`) at boot, and again when the phone page comes back
-  into view (visible, not just focused). `stillCurrent()` reads it before the mic opens, before a send and on the first tap of a burst; a different
-  id means a newer page took over, and this page shuts itself down. A new page closes the glasses mic at boot (a ghost
-  may hold it), and a page closes the mic only while it is the current one.
-- A hidden page is never treated as an exit, so the phone can be locked in a pocket.
+  into view (visible, not just focused). `stillCurrent()` reads it before the mic opens, before an upload and on the first
+  tap of a burst; a different id means a newer page took over, and this page turns itself off without touching the mic.
+  Storage is on the phone, not the glasses.
+- Timers: a timer-driven lens clear and the minute tick check the launch id first, so a page a reopen has replaced sends
+  the glasses nothing; raising the exit menu stops both, and a cancelled menu (FOREGROUND_EXIT) restarts them.
+- A hidden page, a locked phone and FOREGROUND_EXIT (5, an overlay) are never exits, so the phone can be locked in a pocket.
 
-`test/lifecycle.sh` covers all of this with the real app and SDK on a mocked host.
+`test/lifecycle.sh` covers this with the real app and SDK on a mocked host. The simulator has none of Even's host
+shutdown code, so the real test is on glasses: TESTING.md.
 
 ### Fingerprinted files: edit with care
 
 `vite.config.mjs` hashes `site/setup.md`, `site/files/pulltab.py` and `site/files/relay-worker.template.mjs` into the
 app bundle, and the setup message tells the Tab to refuse any file whose hash differs. Any edit to those three files,
-including a comment, changes the app build and must ship together with a new app release and a site deploy. They are
-not re-commented on each release for that reason (0.1.18 leaves them unchanged); their own header comments describe
-them, and this page describes how they fit in.
-
-### Codes in comments
-
-Codes such as F1 to F13, M1 to M5 and L1 to L7 in comments refer to findings of two private security reviews (of 0.1.8
-and 0.1.12). The property each one guards is described beside it.
+including a comment, changes the app build and must ship together with a new app release and a site deploy. For that
+reason they were deliberately left out of the Nov 2 2026 commenting pass (and 0.1.18 and 2.0.0 leave them unchanged); they already carry long header comments of
+their own, and this page describes how they fit in.

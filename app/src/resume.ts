@@ -1,14 +1,12 @@
-// resume.ts: re-runs the app's signed relay connection check when the phone screen opens or is returned to.
-//
-// v0.1.10 (no "Check connection" button; the phone screen shows the
-// connection status by itself when opened). Kept apart from main.ts so it can be unit-tested (test/resume/resume-test.ts).
+// resume.ts: when the phone screen checks the relay connection. Kept apart from main.ts so it can be unit-tested
+// (test/resume/resume-test.ts).
 //
 // The signed check runs once when the screen opens, and once each time the person comes back to it (the page was hidden
 // or lost focus, e.g. they switched to their chat with Tab and back). There is no timer and no polling loop: with no
 // open/resume nothing is checked. A resume while a check is still running doesn't start a second one, and the two
 // events a phone may fire for one return (visibilitychange and focus) count once.
 // Inputs: the document and window (any objects with addEventListener, so tests can pass fakes) and the check to run.
-// Output: a function that removes every listener this added (0.1.18: main.ts calls it when Pull Tab exits); the check's
+// Output: a function that removes every listener this added (main.ts calls it when Pull Tab is turned off); the check's
 // own result is handled by the caller (main.ts boot()).
 //
 // Why several events: Android and iOS WebViews differ in which of visibilitychange, blur/focus and pagehide/pageshow
@@ -25,7 +23,7 @@ export type Doc = Target & { visibilityState?: string };
  * @param win the window (for blur, focus, pagehide, pageshow).
  * @param check the signed connection check; errors are caught and logged, never thrown.
  * @param log optional debug logger.
- * Side effects: adds event listeners until the returned function is called (0.1.18: main.ts calls it when Pull Tab exits).
+ * Side effects: adds event listeners until the returned function is called.
  * @returns a function that removes the listeners again; afterwards no check runs.
  */
 export function checkOnOpenAndResume(doc: Doc, win: Target, check: (why: "open" | "resume") => Promise<unknown>, log?: (...a: any[]) => void): () => void {

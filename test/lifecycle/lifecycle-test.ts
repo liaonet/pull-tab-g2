@@ -1,5 +1,6 @@
-// 0.1.18 lifecycle tests (test/lifecycle.sh): the real app (app/src/main.ts) and the real Even Hub SDK 0.0.16 with a
-// mocked Even app host, as in test/taps (same mock). Checks Even's exit signals (SYSTEM_EXIT 7, ABNORMAL_EXIT 6), the
+// Lifecycle tests (test/lifecycle.sh; new in 0.1.18, rules changed in 2.0.0): the real app (app/src/main.ts) and the real Even Hub SDK 0.0.16 with a
+// mocked Even app host, as in test/taps (same mock). Checks Even's exit signals (SYSTEM_EXIT 7 turns the page off,
+// ABNORMAL_EXIT 6 pauses it; neither sends the glasses anything), that launch sends no mic command, the
 // single-instance launch id (pt.instance in bridge storage), and that phone lock / a hidden page / FOREGROUND_EXIT (5) are
 // NOT exits. One scenario per run: PT_LIFE_SCENARIO names it. Each scenario prints one JSON line {name, ok, detail}.
 // A newer page is simulated the way it shows up to an older one: another launch id written into the shared storage.
@@ -44,6 +45,13 @@ Object.assign(globalThis, {
     const f = { url: String(u), aborted: false }; fetches.push(f);
     if (String(u).includes("/v1/ask")) {
       uploads.push(init?.body?.byteLength ?? -1);
+      if (SC.includes("relayok")) {   // a relay that answers with a valid signature, so the app reaches "Sent" (2.0.0 code review)
+        const pt = await import("../../app/src/pt");
+        const k = pt.keysFrom(pt.unb64u(store["pt.secret"]));
+        const body = new TextEncoder().encode(JSON.stringify({ ok: true, id: "req-1", reply_by: "text" }));
+        const rsig = pt.respSig(k.rkey, 200, init.headers["x-pt-sig"], body);
+        return new Response(body, { status: 200, headers: { "x-pt-rsig": rsig, "content-length": String(body.length) } });
+      }
       if (hangAsk) return new Promise((_, rej) => { init?.signal?.addEventListener?.("abort", () => { f.aborted = true; rej(new Error("aborted")); }); });
     }
     throw new TypeError("no network in this test");
@@ -128,45 +136,83 @@ async function main() {
   const st = (extra: any = {}) => ({ shut: shut(), micOpens: micOpens().length, micCloses: micCloses(), exits: exits().length, uploads: uploads.length,
     recording: recording(), lensWrites: lens.length, log: appLog.filter((m) => /shut|instance|tap|listening|exit/.test(m)).slice(-5), ...extra });
 
-  if (SC === "boot_claims_launch_id") {
+  // 2.0.0: launch sends the glasses no mic command at all (0.1.18's boot-time mic close is the suspected cause of
+  // "Host shutdown did not complete"; CHANGELOG.md)
+  if (SC === "boot_sends_no_mic_command") {
     const ok = typeof mine === "string" && mine.length >= 16 && calls.some((c) => c.method === "setLocalStorage" && (c.data?.key === "pt.instance"))
-      && micCloses() === 1 && micOpens().length === 0;   // the new page takes the mic at boot (closes it)
-    report(SC, ok, { mine, log: appLog.filter((m) => m.includes("instance")) }); return;
+      && !calls.some((c) => c.method === "audioControl");
+    report(SC, ok, { mine, methods: [...new Set(calls.map((c) => c.method))] }); return;
   }
-  // 1. the host's exit signals, from each phase
+  // 1a. SYSTEM_EXIT: the page turns off for good, and sends the glasses nothing from that moment (the host releases the mic)
+  if (SC === "system_exit_idle_then_inert") {
+    tap(CLICK); await sleep(900); tap(CLICK); await sleep(900);   // the first tap clears the launch hint; the second shows the
+                                                                 // hint again: its clear timer and the minute timer are armed
+    const before = { timers: pending(), docL: docCount(), winL: winCount() };
+    sys(SYSTEM_EXIT); await sleep(100);
+    const lensAt = lens.length, callsAt = calls.length;
+    drain(); await sleep(50);
+    const after = { timers: pending(), docL: docCount(), winL: winCount() };
+    await triple(); tap(DOUBLE); await sleep(900); await audio(3); setVisible(false); setVisible(true); await sleep(200);
+    const s = st({ before, after, callsAfter: calls.slice(callsAt).map((c) => c.method) });
+    report(SC, s.shut && before.timers > 0 && after.timers === 0 && after.docL === 0 && after.winL === 0 && lens.length === lensAt &&
+      calls.length === callsAt && s.micOpens === 0 && s.exits === 0 && s.uploads === 0, s); return;
+  }
+  if (SC === "system_exit_while_recording_drops_it") {
+    await startRecording(); await audio(15);
+    const opened = micOpens().length, callsAt = calls.length;
+    sys(SYSTEM_EXIT); await sleep(100);
+    const atExit = calls.slice(callsAt).map((c) => c.method), lensAt = lens.length;
+    drain(); await audio(5); await triple(); await sleep(300);
+    const s = st({ opened, atExit, timers: pending(), callsAfter: calls.slice(callsAt).map((c) => c.method) });
+    report(SC, opened === 1 && atExit.length === 0 && s.shut && s.uploads === 0 && s.micOpens === 1 && pending() === 0 && calls.length === callsAt && lens.length === lensAt, s); return;
+  }
+  // 1b. ABNORMAL_EXIT: work dropped and nothing sent to the glasses, but the page stays subscribed; the next tap that
+  // reaches it makes it live again (a Bluetooth drop may fire this signal)
+  if (SC === "abnormal_exit_idle_pauses_then_tap_resumes") {
+    tap(CLICK); await sleep(900); tap(CLICK); await sleep(900);   // hint up: clear timer and minute timer armed
+    const before = { timers: pending(), docL: docCount(), winL: winCount() };
+    sys(ABNORMAL_EXIT); await sleep(100);
+    const lensAt = lens.length, callsAt = calls.length;
+    drain(); await sleep(50);
+    const after = { timers: pending(), docL: docCount(), winL: winCount() };
+    await audio(3); sys(FOREGROUND_EXIT); await sleep(100);
+    const glassesCalls = calls.slice(callsAt).filter((c) => !/LocalStorage$/.test(c.method)).map((c) => c.method);
+    const quiet = lens.length === lensAt && glassesCalls.length === 0;
+    await startRecording(); await audio(15); await triple();          // the first tap resumes; the triple-tap records and sends
+    const s = st({ before, after, quiet, glassesCalls });
+    report(SC, !s.shut && before.timers > 0 && after.timers === 0 && after.docL === 1 && after.winL === 4 && quiet &&
+      s.micOpens === 1 && s.uploads === 1 && s.exits === 0 && appLog.some((m) => m.startsWith("resumed")), s); return;
+  }
+  if (SC === "abnormal_exit_while_recording_drops_it") {
+    await startRecording(); await audio(15);
+    const callsAt = calls.length, lensAt = lens.length;
+    sys(ABNORMAL_EXIT); await sleep(100);
+    drain(); await audio(5); await sleep(100);
+    const glassesCalls = calls.slice(callsAt).filter((c) => !/LocalStorage$/.test(c.method)).map((c) => c.method);
+    const s = st({ glassesCalls, timers: pending() });
+    report(SC, !s.shut && glassesCalls.length === 0 && lens.length === lensAt && s.uploads === 0 && s.micOpens === 1 && pending() === 0 &&
+      appLog.some((m) => m.startsWith("paused: abnormal exit phase was listening")), s); return;
+  }
   for (const [name, code] of [["system_exit", SYSTEM_EXIT], ["abnormal_exit", ABNORMAL_EXIT]] as [string, number][]) {
-    if (SC === `${name}_idle_then_inert`) {
-      tap(CLICK); await sleep(900); tap(CLICK); await sleep(900);   // the first tap clears the launch hint; the second shows the
-                                                                   // hint again: its clear timer and the minute timer are armed
-      const before = { timers: pending(), docL: docCount(), winL: winCount() };
-      sys(code); await sleep(100);
-      const lensAt = lens.length, callsAt = calls.length;
-      drain(); await sleep(50);
-      const after = { timers: pending(), docL: docCount(), winL: winCount() };
-      await triple(); tap(DOUBLE); await sleep(900); await audio(3); setVisible(false); setVisible(true); await sleep(200);
-      const s = st({ before, after, callsAfter: calls.slice(callsAt).map((c) => c.method) });
-      report(SC, s.shut && before.timers > 0 && after.timers === 0 && after.docL === 0 && after.winL === 0 && lens.length === lensAt &&
-        calls.length === callsAt && s.micOpens === 0 && s.exits === 0 && s.uploads === 0, s); return;
-    }
-    if (SC === `${name}_while_recording_drops_it`) {
-      await startRecording(); await audio(15);
-      const opened = micOpens().length, closesBefore = micCloses();
-      sys(code); await sleep(100);
-      const closed = micCloses() - closesBefore, callsAt = calls.length, lensAt = lens.length;
-      drain(); await audio(5); await triple(); await sleep(300);
-      const s = st({ opened, closed, timers: pending(), callsAfter: calls.slice(callsAt).map((c) => c.method) });
-      report(SC, opened === 1 && closed === 1 && s.shut && s.uploads === 0 && s.micOpens === 1 && pending() === 0 && calls.length === callsAt && lens.length === lensAt, s); return;
-    }
     if (SC === `${name}_while_sending_cancels_upload`) {
       await startRecording(); await audio(15); tap(CLICK); await sleep(120); tap(DOUBLE); await sleep(300);   // send: upload hangs
-      const inFlight = fetches.filter((f) => f.url.includes("/v1/ask")).length;
+      const inFlight = fetches.filter((f) => f.url.includes("/v1/ask")).length, callsAt = calls.length;
       sys(code); await sleep(200);
       const ask = fetches.find((f) => f.url.includes("/v1/ask"));
       const cancels = fetches.filter((f) => f.url.includes("/v1/cancel")).length;
-      const s = st({ inFlight, aborted: !!ask?.aborted, cancels, lastLens: lens.slice(-1) });
+      const glassesCalls = calls.slice(callsAt).filter((c) => !/LocalStorage$/.test(c.method)).map((c) => c.method);
+      const stopped = appLog.some((m) => m.startsWith(code === SYSTEM_EXIT ? "shut down" : "paused"));
+      const s = st({ inFlight, aborted: !!ask?.aborted, cancels, glassesCalls, lastLens: lens.slice(-1) });
       const lensAt = lens.length; drain(); await sleep(50);
-      report(SC, inFlight === 1 && !!ask?.aborted && cancels === 1 && s.shut && !lens.slice(-1)[0]?.includes("Sent") && pending() === 0 && lens.length === lensAt, s); return;
+      report(SC, inFlight === 1 && !!ask?.aborted && cancels === 1 && stopped && glassesCalls.length === 0 && !lens.slice(-1)[0]?.includes("Sent") && pending() === 0 && lens.length === lensAt, s); return;
     }
+  }
+  // A SYSTEM_EXIT while paused still turns the page off
+  if (SC === "abnormal_then_system_exit_turns_off") {
+    sys(ABNORMAL_EXIT); await sleep(50); sys(SYSTEM_EXIT); await sleep(50);
+    const callsAt = calls.length; await startRecording(); await audio(3);
+    const s = st({ docL: docCount() });
+    report(SC, s.shut && docCount() === 0 && calls.length === callsAt && s.micOpens === 0, s); return;
   }
   // 3. not exits: FOREGROUND_EXIT (an overlay), and a hidden phone page (phone locked / in a pocket)
   if (SC === "foreground_exit_is_not_an_exit") {
@@ -241,6 +287,25 @@ async function main() {
     const kept = store["pt.instance"] === "a-newer-page";
     await startRecording();
     const s = st({ kept }); report(SC, kept && s.shut && s.micOpens === 0, s); return;
+  }
+  // 2.0.0 code review (F1, F2): timers of a replaced page, and timers while Even's exit menu is up, send the glasses nothing
+  const glassesWrites = (from: number) => calls.slice(from).filter((c) => !/LocalStorage$/.test(c.method)).map((c) => c.method);
+  if (SC === "superseded_hint_timer_writes_nothing") {
+    tap(CLICK); await sleep(900); tap(CLICK); await sleep(900);   // hint lit again: its clear timer is armed
+    const callsAt = calls.length;
+    store["pt.instance"] = "a-newer-page";                        // closed from the phone and reopened: a newer page claimed
+    fireLong(1000); await sleep(300);
+    const w = glassesWrites(callsAt);
+    report(SC, w.length === 0 && shut(), { glassesWrites: w, shut: shut() }); return;
+  }
+  if (SC === "exit_menu_pending_timer_writes_nothing_relayok") {
+    await startRecording(); await audio(15); await triple(); await sleep(300);   // "Sent" lit, 8 s cancel window armed
+    const sentShown = lens.some((t) => t.includes("Sent, reply coming by text"));
+    tap(DOUBLE); await sleep(900);                                               // exit menu while "Sent" is up
+    const callsAt = calls.length, exitsAt = exits().length;
+    fireLong(1000); await sleep(300);
+    const w = glassesWrites(callsAt);
+    report(SC, sentShown && exitsAt === 1 && w.length === 0, { sentShown, exitsAt, glassesWrites: w }); return;
   }
   report(SC || "(none)", false, "unknown scenario");
 }

@@ -12,7 +12,7 @@
 //   enc   = HMAC(S, "pulltab/v1/enc")                           -> AES-256-GCM key for audio and answers (app + Tab only)
 //   rkey  = HMAC(S, "pulltab/v1/relay")                         -> the relay's own key: it signs every /v1/ answer
 //                                                                  (protocol 3), and the app accepts no answer without it
-// Since 0.1.6 the app calls the relay directly (network whitelist "https://*.sites.tab.bot", no switchboard). Any Tab
+// The app calls the relay directly (network whitelist "https://*.sites.tab.bot"). Any Tab
 // can publish a *.sites.tab.bot site, so the address alone proves nothing: the app pins the relay to rkey, which only
 // a relay set up from this pairing code holds, and refuses every answer that is not signed with it.
 // Pairing code = "PT1-" + BASE32(S || SHA256(S)[0:2]) (55 chars). The user sends it to their own Tab once.
@@ -104,7 +104,7 @@ export function open(k: Keys, box: Uint8Array, aad: string): Uint8Array {
 /** open() for a base64url box holding UTF-8 text. */
 export const openText = (k: Keys, b64: string, aad: string) => TD.decode(open(k, unb64u(b64), aad));
 
-// ---------- the relay's address (0.1.6: direct, no switchboard) ----------
+// ---------- the relay's address ----------
 // Only an https origin on one label of sites.tab.bot is accepted ("https://<name>.sites.tab.bot", nothing after it:
 // no port, path, query, fragment or login), because that is all the app's network whitelist ("https://*.sites.tab.bot")
 // covers. Returns the normalised origin, or null.

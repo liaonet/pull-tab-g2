@@ -42,7 +42,8 @@ Pull Tab never talks to a shared server. Each person gets their own small relay,
 - `listing/`: Even Hub store text, icon and screenshots
 - `test/`: unit tests, the local end-to-end test and its rig
 
-The version history is in [CHANGELOG.md](CHANGELOG.md).
+The version history is in [CHANGELOG.md](CHANGELOG.md). The checks a release needs on real glasses are in
+[TESTING.md](TESTING.md).
 
 ## Build
 
